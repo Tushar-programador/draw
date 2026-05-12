@@ -3,9 +3,10 @@ import type { AuthState } from "../App.js";
 
 interface Props {
   onLogin: (state: NonNullable<AuthState>) => void;
+  onBack?: () => void;
 }
 
-export function LoginPage({ onLogin }: Props) {
+export function LoginPage({ onLogin, onBack }: Props) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,6 +46,15 @@ export function LoginPage({ onLogin }: Props) {
         onSubmit={(e) => void handleSubmit(e)}
         style={{ display: "flex", flexDirection: "column", gap: 12, width: 320 }}
       >
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            style={{ background: "none", border: "none", color: "#475569", fontSize: 13, cursor: "pointer", alignSelf: "flex-start", padding: "0 0 4px", fontFamily: "inherit" }}
+          >
+            ← Back to home
+          </button>
+        )}
         <h1 style={{ textAlign: "center", marginBottom: 8 }}>Zenith Canvas</h1>
 
         {mode === "register" && (

@@ -13,10 +13,14 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
     "@tldraw/tldraw": "^2.4.4",
+    "@types/three": "^0.184.1",
     "@zenith/shared": "workspace:*",
+    "framer-motion": "^12.38.0",
+    "gsap": "^3.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "socket.io-client": "^4.8.1",
+    "three": "^0.184.0",
     "y-protocols": "^1.0.6",
     "yjs": "^13.6.21",
     "zod": "^3.24.1"
