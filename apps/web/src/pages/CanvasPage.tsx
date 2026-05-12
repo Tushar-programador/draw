@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Editor } from "@tldraw/tldraw";
 import { TldrawCanvas } from "../components/Canvas/TldrawCanvas.js";
 import { useLocalCanvas } from "../hooks/useLocalCanvas.js";
 import type { AuthState } from "../App.js";
+import type { DashboardOpenFile } from "./DashboardPage.js";
 
 interface Props {
   auth: NonNullable<AuthState>;
   onLogout: () => void;
+  onBack: () => void;
+  selectedFile: DashboardOpenFile;
 }
 
 const statusLabel: Record<string, string> = {
@@ -16,19 +19,9 @@ const statusLabel: Record<string, string> = {
 };
 
 const statusColor: Record<string, string> = {
-  saved: "#4ade80",
+  saved: "#6ee7b7",
   saving: "#fbbf24",
   unsaved: "#f87171",
-};
-
-type DashboardFile = {
-  id: string;
-  title: string;
-  stage: "BACKLOG" | "IN_PROGRESS" | "REVIEW" | "DONE";
-  workspaceName: string;
-  workspaceId: string;
-  updatedAt: string;
-  driveWebViewLink?: string | null;
 };
 
 type GoogleTokenClient = {
@@ -61,6 +54,7 @@ function loadGoogleScript(): Promise<void> {
       resolve();
       return;
     }
+
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
@@ -74,8 +68,10 @@ function loadGoogleScript(): Promise<void> {
 
 async function getGoogleDriveAccessToken(): Promise<{ accessToken: string; expiresIn: number }> {
   const clientId = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
-  if (!clientId) {
-    throw new Error("VITE_GOOGLE_CLIENT_ID is missing in apps/web/.env");
+  if (!clientId || clientId.includes("your_google_oauth_client_id")) {
+    throw new Error(
+      "Set VITE_GOOGLE_CLIENT_ID in apps/web/.env.local with your Google OAuth Web Client ID, then restart the web dev server."
+    );
   }
 
   await loadGoogleScript();
@@ -99,107 +95,19 @@ async function getGoogleDriveAccessToken(): Promise<{ accessToken: string; expir
   });
 }
 
-const stageLabel: Record<DashboardFile["stage"], string> = {
-  BACKLOG: "Backlog",
-  IN_PROGRESS: "In Progress",
-  REVIEW: "Review",
-  DONE: "Done",
-};
-
-export function CanvasPage({ auth, onLogout }: Props) {
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-  const [documentId, setDocumentId] = useState<string | null>(null);
-  const [documents, setDocuments] = useState<DashboardFile[]>([]);
-  const [dashboardFiles, setDashboardFiles] = useState<DashboardFile[]>([]);
-  const [driveConnected, setDriveConnected] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string>("");
+export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
   const [editor, setEditor] = useState<Editor | null>(null);
-  const initialised = useRef(false);
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState("");
 
-  const { saveToFile, loadFromFile, saveStatus } = useLocalCanvas(editor, documentId ?? "default");
-
-  const handleEditorMount = useCallback((e: Editor) => setEditor(e), []);
+  const { saveToFile, loadFromFile, saveStatus } = useLocalCanvas(editor, selectedFile.id);
 
   const tokenHeader = { Authorization: `Bearer ${auth.token}` };
 
-  const loadDashboardFiles = useCallback(async () => {
-    const res = await fetch("/api/auth/dashboard/files", { headers: tokenHeader });
-    if (!res.ok) throw new Error("Could not load dashboard files");
-    const data = (await res.json()) as DashboardFile[];
-    setDashboardFiles(data);
-  }, [auth.token]);
-
-  const loadWorkspaceAndDocs = useCallback(async () => {
-    let wsRes = await fetch("/api/workspaces", { headers: tokenHeader });
-    if (!wsRes.ok) throw new Error(`Workspace fetch failed: ${wsRes.status}`);
-    let workspaces = (await wsRes.json()) as Array<{ id: string }>;
-
-    if (!workspaces.length) {
-      wsRes = await fetch("/api/workspaces", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...tokenHeader },
-        body: JSON.stringify({ name: `${auth.name}'s Workspace`, slug: auth.userId.slice(0, 40), isEncrypted: false }),
-      });
-      if (!wsRes.ok) throw new Error(`Workspace create failed: ${wsRes.status}`);
-      workspaces = [(await wsRes.json()) as { id: string }];
-    }
-
-    const wid = workspaces[0]!.id;
-    setWorkspaceId(wid);
-
-    let docsRes = await fetch(`/api/workspaces/${wid}/documents`, { headers: tokenHeader });
-    if (!docsRes.ok) throw new Error(`Documents fetch failed: ${docsRes.status}`);
-    let docs = (await docsRes.json()) as DashboardFile[];
-
-    if (!docs.length) {
-      docsRes = await fetch(`/api/workspaces/${wid}/documents`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...tokenHeader },
-        body: JSON.stringify({ title: "My First Canvas" }),
-      });
-      if (!docsRes.ok) throw new Error(`Document create failed: ${docsRes.status}`);
-      docs = [(await docsRes.json()) as DashboardFile];
-    }
-
-    setDocuments(docs);
-    setDocumentId(docs[0]!.id);
-  }, [auth.name, auth.token, auth.userId]);
-
-  const createDocument = useCallback(async () => {
-    if (!workspaceId) return;
-    const res = await fetch(`/api/workspaces/${workspaceId}/documents`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...tokenHeader },
-      body: JSON.stringify({ title: `Canvas ${documents.length + 1}` }),
-    });
-    if (!res.ok) {
-      setError("Failed to create document");
-      return;
-    }
-    const created = (await res.json()) as DashboardFile;
-    setDocuments((prev) => [created, ...prev]);
-    setDocumentId(created.id);
-    await loadDashboardFiles();
-  }, [workspaceId, tokenHeader, documents.length, loadDashboardFiles]);
-
-  const updateDocumentStage = useCallback(
-    async (id: string, stage: DashboardFile["stage"]) => {
-      if (!workspaceId) return;
-      const res = await fetch(`/api/workspaces/${workspaceId}/documents/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...tokenHeader },
-        body: JSON.stringify({ stage }),
-      });
-      if (!res.ok) {
-        setError("Failed to update file stage");
-        return;
-      }
-      await Promise.all([loadWorkspaceAndDocs(), loadDashboardFiles()]);
-    },
-    [workspaceId, tokenHeader, loadDashboardFiles, loadWorkspaceAndDocs]
-  );
+  const handleEditorMount = useCallback((mountedEditor: Editor) => {
+    setEditor(mountedEditor);
+  }, []);
 
   const connectGoogleDrive = useCallback(async () => {
     setError(null);
@@ -219,7 +127,7 @@ export function CanvasPage({ auth, onLogout }: Props) {
   }, [tokenHeader]);
 
   const saveCurrentToDrive = useCallback(async () => {
-    if (!editor || !documentId) {
+    if (!editor) {
       setError("Open a canvas before saving to Google Drive");
       return;
     }
@@ -229,7 +137,7 @@ export function CanvasPage({ auth, onLogout }: Props) {
       const snapshot = JSON.stringify(editor.getSnapshot(), null, 2);
       const boundary = "zenith-canvas-boundary";
       const metadata = {
-        name: `zenith-${documentId}.tldr`,
+        name: `zenith-${selectedFile.id}.tldr`,
         mimeType: "application/json",
       };
       const multipartBody =
@@ -260,242 +168,151 @@ export function CanvasPage({ auth, onLogout }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json", ...tokenHeader },
         body: JSON.stringify({
-          documentId,
+          documentId: selectedFile.id,
           driveFileId: uploaded.id,
           driveWebViewLink: uploaded.webViewLink,
         }),
       });
 
       setInfo("Canvas saved to Google Drive.");
-      await loadDashboardFiles();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save to Drive");
     }
-  }, [editor, documentId, tokenHeader, loadDashboardFiles]);
+  }, [editor, selectedFile.id, tokenHeader]);
 
   useEffect(() => {
-    if (initialised.current) return;
-    initialised.current = true;
+    setEditor(null);
+    setError(null);
+    setInfo("");
+  }, [selectedFile.id]);
 
+  useEffect(() => {
     void (async () => {
-      try {
-        await Promise.all([loadWorkspaceAndDocs(), loadDashboardFiles()]);
-        const meRes = await fetch("/api/auth/me", { headers: tokenHeader });
-        if (meRes.ok) {
-          const me = (await meRes.json()) as { googleDriveConnected?: boolean };
-          setDriveConnected(Boolean(me.googleDriveConnected));
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load canvas");
-      }
+      const meRes = await fetch("/api/auth/me", { headers: tokenHeader });
+      if (!meRes.ok) return;
+      const me = (await meRes.json()) as { googleDriveConnected?: boolean };
+      setDriveConnected(Boolean(me.googleDriveConnected));
     })();
-  }, [loadDashboardFiles, loadWorkspaceAndDocs, tokenHeader]);
-
-  if (error) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 16 }}>
-        <p style={{ color: "#f87171" }}>{error}</p>
-        <button onClick={onLogout} style={btnStyle}>Sign out and try again</button>
-      </div>
-    );
-  }
-
-  if (!documentId) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
-        <p style={{ color: "#94a3b8" }}>Loading canvas…</p>
-      </div>
-    );
-  }
+  }, [tokenHeader]);
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <div style={topBarStyle}>
-        <span style={{ fontWeight: 600, fontSize: 14 }}>Zenith Canvas</span>
+    <div style={shellStyle}>
+      <header style={canvasTopBarStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={onBack} style={secondaryActionStyle}>← Back to files</button>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{selectedFile.title}</div>
+            <div style={{ fontSize: 12, color: "#8f98aa" }}>{selectedFile.workspaceName || "Workspace"}</div>
+          </div>
+        </div>
 
-        {/* Save status indicator */}
-        <span style={{ fontSize: 12, color: statusColor[saveStatus] }}>
-          ● {statusLabel[saveStatus]}
-        </span>
-
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={() => setSidebarOpen((prev) => !prev)} style={{ ...btnStyle, background: "#0f172a" }}>
-            {sidebarOpen ? "Hide Shutter" : "Show Shutter"}
-          </button>
-          <button onClick={() => void createDocument()} style={{ ...btnStyle, background: "#0b5" }}>
-            New file
-          </button>
-          <button
-            onClick={() => void connectGoogleDrive()}
-            style={{ ...btnStyle, background: driveConnected ? "#14532d" : "#1d4ed8" }}
-            title="Grant Google Drive access permission"
-          >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: statusColor[saveStatus] }}>● {statusLabel[saveStatus]}</span>
+          <button onClick={() => void connectGoogleDrive()} style={driveButtonStyle(driveConnected)}>
             {driveConnected ? "Drive connected" : "Connect Drive"}
           </button>
-          <button onClick={() => void saveToFile()} style={btnStyle} title="Save canvas to a .tldr file on your drive">
-            Export
-          </button>
-          <button onClick={() => void saveCurrentToDrive()} style={{ ...btnStyle, background: "#7c3aed" }} title="Save this file to Google Drive">
-            Save to Drive
-          </button>
-          <button onClick={() => void loadFromFile()} style={{ ...btnStyle, background: "transparent", border: "1px solid #334155" }} title="Open a .tldr file from your drive">
-            Open file
-          </button>
-          <span style={{ fontSize: 13, color: "#64748b", borderLeft: "1px solid #1e293b", paddingLeft: 8 }}>
-            {auth.name}
-          </span>
-          <button onClick={onLogout} style={{ ...btnStyle, background: "transparent", border: "1px solid #334155", color: "#94a3b8" }}>
-            Sign out
-          </button>
+          <button onClick={() => void saveCurrentToDrive()} style={primaryActionStyle}>Save to Drive</button>
+          <button onClick={() => void saveToFile()} style={secondaryActionStyle}>Export</button>
+          <button onClick={() => void loadFromFile()} style={secondaryActionStyle}>Open file</button>
+          <button onClick={onLogout} style={secondaryActionStyle}>Sign out</button>
+        </div>
+      </header>
+
+      {(error || info) && (
+        <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+          {error && <div style={errorBannerStyle}>{error}</div>}
+          {info && <div style={infoBannerStyle}>{info}</div>}
+        </div>
+      )}
+
+      <div style={canvasShellStyle}>
+        <div style={canvasFrameStyle}>
+          <TldrawCanvas
+            key={selectedFile.id}
+            documentId={selectedFile.id}
+            token={auth.token}
+            onEditorMount={handleEditorMount}
+          />
         </div>
       </div>
-
-      {error && (
-        <div style={{ position: "absolute", top: 44, right: 12, zIndex: 400, background: "#7f1d1d", color: "#fee2e2", padding: "8px 10px", borderRadius: 8, fontSize: 12 }}>
-          {error}
-        </div>
-      )}
-      {info && (
-        <div style={{ position: "absolute", top: 44, left: sidebarOpen ? 336 : 12, zIndex: 380, background: "#14532d", color: "#dcfce7", padding: "8px 10px", borderRadius: 8, fontSize: 12 }}>
-          {info}
-        </div>
-      )}
-
-      {sidebarOpen && (
-        <aside style={sidebarStyle}>
-          <h3 style={{ fontSize: 15, marginBottom: 8 }}>Dashboard</h3>
-          <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>All files + Kanban shutter</p>
-
-          <div style={fileListStyle}>
-            {dashboardFiles.map((file) => (
-              <button
-                key={file.id}
-                onClick={() => setDocumentId(file.id)}
-                style={{
-                  ...fileItemStyle,
-                  borderColor: file.id === documentId ? "#38bdf8" : "#334155",
-                }}
-              >
-                <span style={{ fontWeight: 600, textAlign: "left" }}>{file.title}</span>
-                <span style={{ fontSize: 11, color: "#94a3b8" }}>{file.workspaceName}</span>
-                <span style={{ fontSize: 11, color: "#cbd5e1" }}>{stageLabel[file.stage]}</span>
-                {file.driveWebViewLink ? (
-                  <a
-                    href={file.driveWebViewLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "#60a5fa", fontSize: 11 }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Open in Drive
-                  </a>
-                ) : (
-                  <span style={{ fontSize: 11, color: "#64748b" }}>Not synced</span>
-                )}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 14 }}>
-            <h4 style={{ fontSize: 13, marginBottom: 10 }}>Kanban</h4>
-            {(["BACKLOG", "IN_PROGRESS", "REVIEW", "DONE"] as const).map((stage) => (
-              <div key={stage} style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{stageLabel[stage]}</div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  {documents
-                    .filter((doc) => doc.stage === stage)
-                    .map((doc) => (
-                      <div key={doc.id} style={{ ...fileItemStyle, background: "#0f172a", border: "1px solid #334155" }}>
-                        <strong style={{ fontSize: 12 }}>{doc.title}</strong>
-                        <select
-                          value={doc.stage}
-                          onChange={(e) => void updateDocumentStage(doc.id, e.target.value as DashboardFile["stage"])}
-                          style={{ marginTop: 6, borderRadius: 6, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", fontSize: 11, padding: "4px 6px" }}
-                        >
-                          <option value="BACKLOG">Backlog</option>
-                          <option value="IN_PROGRESS">In Progress</option>
-                          <option value="REVIEW">Review</option>
-                          <option value="DONE">Done</option>
-                        </select>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </aside>
-      )}
-
-      {/* ── Canvas ──────────────────────────────────────────────────────── */}
-      <TldrawCanvas
-        documentId={documentId}
-        token={auth.token}
-        style={{ top: 40, left: sidebarOpen ? 324 : 0 }}
-        onEditorMount={handleEditorMount}
-      />
     </div>
   );
 }
 
-const topBarStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  zIndex: 300,
+const shellStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  padding: "18px 18px 14px",
+  background: "#171717",
+  color: "#f8fafc",
+  overflow: "hidden",
+};
+
+const canvasTopBarStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  padding: "6px 16px",
-  background: "rgba(15,15,15,0.9)",
-  backdropFilter: "blur(8px)",
-  borderBottom: "1px solid #1e293b",
-  height: 40,
+  gap: 14,
+  flexWrap: "wrap",
+  marginBottom: 16,
 };
 
-const btnStyle: React.CSSProperties = {
-  fontSize: 12,
-  background: "#1e293b",
+const canvasShellStyle: React.CSSProperties = {
+  height: "calc(100% - 92px)",
+  minHeight: 560,
+  display: "block",
+};
+
+const canvasFrameStyle: React.CSSProperties = {
+  position: "relative",
+  height: "100%",
+  minHeight: 0,
+  borderRadius: 16,
+  overflow: "hidden",
+  border: "1px solid #2b2b2b",
+  background: "#0f172a",
+};
+
+const primaryActionStyle: React.CSSProperties = {
   border: "none",
-  borderRadius: 6,
-  color: "#f0f0f0",
-  padding: "4px 10px",
-  cursor: "pointer",
-};
-
-const sidebarStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 40,
-  left: 0,
-  bottom: 0,
-  width: 324,
-  zIndex: 260,
-  background: "linear-gradient(180deg, #0b1220 0%, #0a0f1a 100%)",
-  borderRight: "1px solid #1e293b",
-  padding: 12,
-  overflowY: "auto",
-};
-
-const fileListStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-  maxHeight: 220,
-  overflowY: "auto",
-  paddingRight: 6,
-};
-
-const fileItemStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "flex-start",
-  gap: 4,
-  width: "100%",
-  border: "1px solid #334155",
   borderRadius: 8,
-  padding: "8px 10px",
-  background: "#111827",
-  color: "#e2e8f0",
+  padding: "11px 14px",
+  background: "#2563eb",
+  color: "#fff",
+  fontWeight: 600,
   cursor: "pointer",
-  textAlign: "left",
 };
+
+const secondaryActionStyle: React.CSSProperties = {
+  border: "1px solid #313131",
+  borderRadius: 8,
+  padding: "11px 14px",
+  background: "#202020",
+  color: "#f8fafc",
+  cursor: "pointer",
+};
+
+const errorBannerStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: 10,
+  background: "rgba(127, 29, 29, 0.8)",
+  color: "#fee2e2",
+  fontSize: 13,
+  border: "1px solid rgba(239, 68, 68, 0.25)",
+};
+
+const infoBannerStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: 10,
+  background: "rgba(20, 83, 45, 0.82)",
+  color: "#dcfce7",
+  fontSize: 13,
+  border: "1px solid rgba(34, 197, 94, 0.2)",
+};
+
+const driveButtonStyle = (connected: boolean): React.CSSProperties => ({
+  ...secondaryActionStyle,
+  background: connected ? "#123624" : "#202020",
+  borderColor: connected ? "#1d6d45" : "#313131",
+  color: connected ? "#d1fae5" : "#f8fafc",
+});

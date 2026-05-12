@@ -6,6 +6,44 @@ const STORAGE_PREFIX = "zenith_canvas_";
 
 type SaveStatus = "saved" | "saving" | "unsaved";
 
+function triggerSnapshotDownload(snapshot: string, fileName: string) {
+  const blob = new Blob([snapshot], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export function getCanvasStorageKey(documentId: string): string {
+  return `${STORAGE_PREFIX}${documentId}`;
+}
+
+export function readLocalCanvasSnapshot(documentId: string): string | null {
+  try {
+    return localStorage.getItem(getCanvasStorageKey(documentId));
+  } catch {
+    return null;
+  }
+}
+
+export function writeLocalCanvasSnapshot(documentId: string, snapshot: string): boolean {
+  try {
+    localStorage.setItem(getCanvasStorageKey(documentId), snapshot);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function exportLocalCanvasSnapshot(documentId: string, fileName: string): boolean {
+  const snapshot = readLocalCanvasSnapshot(documentId);
+  if (!snapshot) return false;
+  triggerSnapshotDownload(snapshot, fileName);
+  return true;
+}
+
 /**
  * Persists canvas state entirely on the user's own device:
  *  - Auto-saves to localStorage every 5 s when dirty
@@ -96,13 +134,7 @@ export function useLocalCanvas(editor: Editor | null, documentId: string) {
     }
 
     // Fallback: trigger a browser download
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "canvas.tldr";
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerSnapshotDownload(json, "canvas.tldr");
   }, [editor]);
 
   // ── Load from file ─────────────────────────────────────────────────────────

@@ -250,7 +250,10 @@ export async function authRoutes(app: FastifyInstance) {
 
     const docs = await app.prisma.documentMeta.findMany({
       where: { workspaceId: { in: workspaceIds }, isArchived: false },
-      include: { workspace: { select: { id: true, name: true } } },
+      include: {
+        workspace: { select: { id: true, name: true } },
+        creator: { select: { name: true } },
+      },
       orderBy: { updatedAt: "desc" },
     });
 
@@ -261,7 +264,9 @@ export async function authRoutes(app: FastifyInstance) {
         stage: doc.stage,
         workspaceId: doc.workspaceId,
         workspaceName: doc.workspace.name,
+        createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
+        authorName: doc.creator.name,
         driveFileId: doc.driveFileId,
         driveWebViewLink: doc.driveWebViewLink,
         lastSyncedAt: doc.lastSyncedAt,
