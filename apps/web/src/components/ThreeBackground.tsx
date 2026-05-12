@@ -45,8 +45,9 @@ export function ThreeBackground() {
     const colors = [0x7c3aed, 0x3b82f6, 0x8b5cf6, 0x2563eb, 0xa78bfa, 0x60a5fa];
 
     geometries.forEach((geo, i) => {
+      const color: THREE.ColorRepresentation = colors[i % colors.length] ?? 0x7c3aed;
       const mat = new THREE.MeshPhongMaterial({
-        color: colors[i % colors.length],
+        color,
         wireframe: true,
         opacity: 0.18 + Math.random() * 0.12,
         transparent: true,
@@ -66,12 +67,14 @@ export function ThreeBackground() {
       mesh.scale.setScalar(s);
 
       // attach random drift speeds
-      (mesh as THREE.Mesh & { _spin: THREE.Vector3; _drift: THREE.Vector3 })._spin = new THREE.Vector3(
+      type AnimMesh = THREE.Mesh & { _spin: THREE.Vector3; _drift: THREE.Vector3 };
+      const am = mesh as unknown as AnimMesh;
+      am._spin = new THREE.Vector3(
         (Math.random() - 0.5) * 0.004,
         (Math.random() - 0.5) * 0.004,
         (Math.random() - 0.5) * 0.003
       );
-      (mesh as THREE.Mesh & { _spin: THREE.Vector3; _drift: THREE.Vector3 })._drift = new THREE.Vector3(
+      am._drift = new THREE.Vector3(
         (Math.random() - 0.5) * 0.004,
         (Math.random() - 0.5) * 0.003,
         0
@@ -133,7 +136,8 @@ export function ThreeBackground() {
 
       // rotate shapes + drift
       shapes.forEach((mesh) => {
-        const m = mesh as THREE.Mesh & { _spin: THREE.Vector3; _drift: THREE.Vector3 };
+        type AnimMesh = THREE.Mesh & { _spin: THREE.Vector3; _drift: THREE.Vector3 };
+        const m = mesh as unknown as AnimMesh;
         mesh.rotation.x += m._spin.x;
         mesh.rotation.y += m._spin.y;
         mesh.rotation.z += m._spin.z;
