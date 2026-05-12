@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import {
   CreateUserSchema,
   ForgotPasswordSchema,
+  GoogleAuthSchema,
   GoogleDriveConnectSchema,
   LoginSchema,
   RequestEmailOtpSchema,
@@ -9,7 +10,8 @@ import {
   VerifyEmailOtpSchema,
 } from "@zenith/shared";
 import bcrypt from "bcryptjs";
-import { randomInt } from "node:crypto";
+import { OAuth2Client } from "google-auth-library";
+import { randomBytes, randomInt } from "node:crypto";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -19,6 +21,11 @@ declare module "fastify" {
 
 export async function authRoutes(app: FastifyInstance) {
   const otpExpiryMs = 10 * 60 * 1000;
+  const googleClientIds = (process.env["GOOGLE_CLIENT_ID"] ?? "")
+    .split(",")
+    .map((clientId) => clientId.trim())
+    .filter(Boolean);
+  const googleAuthClient = googleClientIds.length > 0 ? new OAuth2Client() : null;
 
   const createOtp = () => String(randomInt(100000, 1000000));
 
@@ -39,7 +46,7 @@ export async function authRoutes(app: FastifyInstance) {
     const hashed = await bcrypt.hash(password, 12);
     const user = await app.prisma.user.create({
       data: { email, name, password: hashed, emailVerified: false },
-      select: { id: true, email: true, name: true, emailVerified: true, createdAt: true },
+      select: { id: true, email: true, name: true, emailVerified: true, googleDriveConnected: true, createdAt: true },
     });
 
     const otp = createOtp();
@@ -77,9 +84,65 @@ export async function authRoutes(app: FastifyInstance) {
 
     const token = app.jwt.sign({ id: user.id, email: user.email });
     return reply.send({
-      user: { id: user.id, email: user.email, name: user.name, emailVerified: user.emailVerified },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: user.emailVerified,
+        googleDriveConnected: user.googleDriveConnected,
+      },
       token,
     });
+  });
+
+  // POST /api/auth/google
+  app.post("/google", async (request, reply) => {
+    const body = GoogleAuthSchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.code(400).send({ error: body.error.flatten() });
+    }
+
+    if (!googleAuthClient || googleClientIds.length === 0) {
+      return reply.code(503).send({ error: "Google OAuth is not configured" });
+    }
+
+    let payload;
+    try {
+      const ticket = await googleAuthClient.verifyIdToken({
+        idToken: body.data.idToken,
+        audience: googleClientIds,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      return reply.code(401).send({ error: "Invalid Google credential" });
+    }
+
+    if (!payload?.email || !payload.email_verified) {
+      return reply.code(400).send({ error: "Google account email is not verified" });
+    }
+
+    const fallbackName = payload.name?.trim() || payload.email.split("@")[0] || "Google User";
+    const avatarUrl = payload.picture ?? null;
+
+    const user = await app.prisma.user.upsert({
+      where: { email: payload.email },
+      update: {
+        name: fallbackName,
+        avatarUrl,
+        emailVerified: true,
+      },
+      create: {
+        email: payload.email,
+        name: fallbackName,
+        password: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
+        avatarUrl,
+        emailVerified: true,
+      },
+      select: { id: true, email: true, name: true, emailVerified: true, googleDriveConnected: true },
+    });
+
+    const token = app.jwt.sign({ id: user.id, email: user.email });
+    return reply.send({ user, token });
   });
 
   // POST /api/auth/request-email-otp

@@ -50,7 +50,7 @@ Based on the pivot to a unified JavaScript/TypeScript ecosystem for faster devel
 | :--- | :--- | :--- | :--- |
 | **Language Stack** | Node.js / TS / Tauri | JS / Web | Heavy Enterprise Web |
 | **Data Sync** | Yjs + Hocuspocus | Custom Sync | Proprietary |
-| **Primary Moat** | Engineering AI + Speed | Hand-drawn Style | Enterprise Features |
+| **Primary Moat** | Engineering AI + Speed | Hand- drawn Style | Enterprise Features |
 | **Memory Usage** | Very Low (Tauri) | Medium (Web) | High (Browser/Electron) |
 
 ---

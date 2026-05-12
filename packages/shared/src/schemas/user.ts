@@ -35,6 +35,11 @@ export const LoginSchema = z.object({
 });
 export type Login = z.infer<typeof LoginSchema>;
 
+export const GoogleAuthSchema = z.object({
+  idToken: z.string().min(1),
+});
+export type GoogleAuth = z.infer<typeof GoogleAuthSchema>;
+
 export const RequestEmailOtpSchema = z.object({
   email: z.string().email(),
 });

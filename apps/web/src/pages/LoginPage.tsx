@@ -1,5 +1,37 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AuthState } from "../App.js";
+import { getGoogleDriveAccessToken } from "../lib/googleDrive.js";
+
+type AuthResponse = {
+  token?: string;
+  user?: { id: string; name: string; email: string; emailVerified?: boolean; googleDriveConnected?: boolean };
+  error?: unknown;
+  devOtp?: string;
+  message?: string;
+};
+
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
+let googleScriptPromise: Promise<void> | null = null;
+
+function loadGoogleScript() {
+  if (window.google?.accounts?.id) {
+    return Promise.resolve();
+  }
+
+  if (!googleScriptPromise) {
+    googleScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load Google sign-in"));
+      document.head.appendChild(script);
+    });
+  }
+
+  return googleScriptPromise;
+}
 
 interface Props {
   onLogin: (state: NonNullable<AuthState>) => void;
@@ -16,6 +48,121 @@ export function LoginPage({ onLogin, onBack }: Props) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+
+  const connectDrive = async (authToken: string): Promise<boolean> => {
+    const token = await getGoogleDriveAccessToken("consent");
+    const res = await fetch("/api/auth/google-drive/connect", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ accessToken: token.accessToken, expiresIn: token.expiresIn }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Google Drive permission was not saved");
+    }
+
+    return true;
+  };
+
+  const applyAuthState = (data: AuthResponse) => {
+    if (!data.token || !data.user) {
+      throw new Error("Authentication failed");
+    }
+
+    onLogin({
+      token: data.token,
+      userId: data.user.id,
+      name: data.user.name,
+      email: data.user.email,
+      emailVerified: Boolean(data.user.emailVerified),
+      googleDriveConnected: Boolean(data.user.googleDriveConnected),
+    });
+  };
+
+  useEffect(() => {
+    if (!googleClientId || (mode !== "login" && mode !== "register") || !googleButtonRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void loadGoogleScript()
+      .then(() => {
+        if (cancelled || !googleButtonRef.current || !window.google?.accounts?.id) {
+          return;
+        }
+
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: async ({ credential }) => {
+            if (!credential) {
+              setError("Google sign-in did not return a credential");
+              return;
+            }
+
+            setError("");
+            setNotice("");
+            setLoading(true);
+
+            try {
+              const res = await fetch("/api/auth/google", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ idToken: credential }),
+              });
+              const data = (await res.json()) as AuthResponse;
+
+              if (!res.ok) {
+                setError(typeof data.error === "string" ? data.error : "Google authentication failed");
+                return;
+              }
+
+              if (mode === "register" && data.token) {
+                try {
+                  await connectDrive(data.token);
+                  if (data.user) data.user.googleDriveConnected = true;
+                } catch (driveError) {
+                  const driveMsg = driveError instanceof Error ? driveError.message : "Drive permission skipped";
+                  setNotice(driveMsg);
+                }
+              }
+
+              applyAuthState(data);
+            } catch {
+              setError("Google authentication failed");
+            } finally {
+              setLoading(false);
+            }
+          },
+        });
+
+        googleButtonRef.current.innerHTML = "";
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          type: "standard",
+          theme: "outline",
+          size: "large",
+          text: mode === "register" ? "signup_with" : "signin_with",
+          shape: "pill",
+          width: 320,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("Google sign-in is unavailable right now");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (googleButtonRef.current) {
+        googleButtonRef.current.innerHTML = "";
+      }
+    };
+  }, [mode, onLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,13 +231,7 @@ export function LoginPage({ onLogin, onBack }: Props) {
         body: JSON.stringify(body),
       });
 
-      const data = (await res.json()) as {
-        token?: string;
-        user?: { id: string; name: string; email: string; emailVerified?: boolean };
-        error?: unknown;
-        devOtp?: string;
-        message?: string;
-      };
+      const data = (await res.json()) as AuthResponse;
 
       if (!res.ok || !data.token || !data.user) {
         setError(typeof data.error === "string" ? data.error : "Authentication failed");
@@ -98,18 +239,23 @@ export function LoginPage({ onLogin, onBack }: Props) {
       }
 
       if (mode === "register") {
+        if (data.token) {
+          try {
+            await connectDrive(data.token);
+            if (data.user) data.user.googleDriveConnected = true;
+            setNotice((data.devOtp ? `Email OTP (dev): ${data.devOtp}. ` : "") + "Drive connected. Verify your email with OTP.");
+          } catch (driveError) {
+            const driveMsg = driveError instanceof Error ? driveError.message : "Drive permission skipped";
+            setNotice((data.devOtp ? `Email OTP (dev): ${data.devOtp}. ` : "") + `Verify your email with OTP. ${driveMsg}`);
+          }
+        } else {
+          setNotice(data.devOtp ? `Email OTP (dev): ${data.devOtp}` : data.message ?? "Verify your email with OTP.");
+        }
         setMode("verify");
-        setNotice(data.devOtp ? `Email OTP (dev): ${data.devOtp}` : data.message ?? "Verify your email with OTP.");
         return;
       }
 
-      onLogin({
-        token: data.token,
-        userId: data.user.id,
-        name: data.user.name,
-        email: data.user.email,
-        emailVerified: Boolean(data.user.emailVerified),
-      });
+      applyAuthState(data);
     } finally {
       setLoading(false);
     }
@@ -159,6 +305,17 @@ export function LoginPage({ onLogin, onBack }: Props) {
             required
             style={inputStyle}
           />
+        )}
+
+        {googleClientId && (mode === "login" || mode === "register") && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#64748b", fontSize: 12 }}>
+              <span style={{ flex: 1, height: 1, background: "#334155" }} />
+              <span>or continue with</span>
+              <span style={{ flex: 1, height: 1, background: "#334155" }} />
+            </div>
+            <div ref={googleButtonRef} style={{ minHeight: 44, display: "flex", justifyContent: "center" }} />
+          </>
         )}
 
         {(mode === "verify" || mode === "reset") && (

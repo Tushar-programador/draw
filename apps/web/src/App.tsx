@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { CanvasPage } from "./pages/CanvasPage.js";
+import { Suspense, lazy, useState } from "react";
 import { DashboardPage, type DashboardOpenFile } from "./pages/DashboardPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { HomePage } from "./pages/HomePage.js";
+
+const CanvasPage = lazy(async () => import("./pages/CanvasPage.js").then((mod) => ({ default: mod.CanvasPage })));
 
 export type AuthState = {
   token: string;
@@ -10,6 +11,7 @@ export type AuthState = {
   name: string;
   email: string;
   emailVerified: boolean;
+  googleDriveConnected: boolean;
 } | null;
 type Page = "home" | "login" | "dashboard" | "canvas";
 
@@ -44,7 +46,11 @@ export default function App() {
   };
 
   if (page === "canvas" && auth && selectedFile) {
-    return <CanvasPage auth={auth} onLogout={handleLogout} onBack={handleBackToDashboard} selectedFile={selectedFile} />;
+    return (
+      <Suspense fallback={<div style={{ height: "100%", display: "grid", placeItems: "center" }}>Loading canvas...</div>}>
+        <CanvasPage auth={auth} onLogout={handleLogout} onBack={handleBackToDashboard} selectedFile={selectedFile} />
+      </Suspense>
+    );
   }
   if (page === "dashboard" && auth) {
     return <DashboardPage auth={auth} onLogout={handleLogout} onOpenFile={handleOpenFile} />;

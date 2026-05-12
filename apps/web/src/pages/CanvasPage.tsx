@@ -4,6 +4,10 @@ import { TldrawCanvas } from "../components/Canvas/TldrawCanvas.js";
 import { useLocalCanvas } from "../hooks/useLocalCanvas.js";
 import type { AuthState } from "../App.js";
 import type { DashboardOpenFile } from "./DashboardPage.js";
+import { getGoogleDriveAccessToken } from "../lib/googleDrive.js";
+import "./CanvasPage.css";
+
+const DRIVE_SYNC_INTERVAL_MS = 8000;
 
 interface Props {
   auth: NonNullable<AuthState>;
@@ -24,82 +28,13 @@ const statusColor: Record<string, string> = {
   unsaved: "#f87171",
 };
 
-type GoogleTokenClient = {
-  requestAccessToken: (opts?: { prompt?: string }) => void;
-};
-
-type GoogleOAuth = {
-  oauth2: {
-    initTokenClient: (config: {
-      client_id: string;
-      scope: string;
-      callback: (response: { access_token?: string; expires_in?: number; error?: string }) => void;
-    }) => GoogleTokenClient;
-  };
-};
-
-type GoogleWindow = Window & {
-  google?: {
-    accounts?: GoogleOAuth;
-  };
-};
-
-let gsiLoader: Promise<void> | null = null;
-
-function loadGoogleScript(): Promise<void> {
-  if (gsiLoader) return gsiLoader;
-  gsiLoader = new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-    if (existing) {
-      resolve();
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load Google identity script"));
-    document.head.appendChild(script);
-  });
-  return gsiLoader;
-}
-
-async function getGoogleDriveAccessToken(): Promise<{ accessToken: string; expiresIn: number }> {
-  const clientId = import.meta.env["VITE_GOOGLE_CLIENT_ID"] as string | undefined;
-  if (!clientId || clientId.includes("your_google_oauth_client_id")) {
-    throw new Error(
-      "Set VITE_GOOGLE_CLIENT_ID in apps/web/.env.local with your Google OAuth Web Client ID, then restart the web dev server."
-    );
-  }
-
-  await loadGoogleScript();
-  const win = window as GoogleWindow;
-  const oauth = win.google?.accounts;
-  if (!oauth) throw new Error("Google accounts SDK is not available");
-
-  return new Promise((resolve, reject) => {
-    const tokenClient = oauth.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: "https://www.googleapis.com/auth/drive.file",
-      callback: (response) => {
-        if (!response.access_token || !response.expires_in || response.error) {
-          reject(new Error(response.error ?? "Failed to obtain Google Drive permission"));
-          return;
-        }
-        resolve({ accessToken: response.access_token, expiresIn: response.expires_in });
-      },
-    });
-    tokenClient.requestAccessToken({ prompt: "consent" });
-  });
-}
-
 export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveConnected, setDriveConnected] = useState(Boolean(auth.googleDriveConnected));
+  const [driveSyncStatus, setDriveSyncStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState("");
+  const [driveSyncError, setDriveSyncError] = useState<string | null>(null);
 
   const { saveToFile, loadFromFile, saveStatus } = useLocalCanvas(editor, selectedFile.id);
 
@@ -109,32 +44,9 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
     setEditor(mountedEditor);
   }, []);
 
-  const connectGoogleDrive = useCallback(async () => {
-    setError(null);
-    try {
-      const token = await getGoogleDriveAccessToken();
-      const res = await fetch("/api/auth/google-drive/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...tokenHeader },
-        body: JSON.stringify({ accessToken: token.accessToken, expiresIn: token.expiresIn }),
-      });
-      if (!res.ok) throw new Error("Could not connect Google Drive");
-      setDriveConnected(true);
-      setInfo("Google Drive permission granted.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Drive permission failed");
-    }
-  }, [tokenHeader]);
-
-  const saveCurrentToDrive = useCallback(async () => {
-    if (!editor) {
-      setError("Open a canvas before saving to Google Drive");
-      return;
-    }
-
-    try {
-      const token = await getGoogleDriveAccessToken();
-      const snapshot = JSON.stringify(editor.getSnapshot(), null, 2);
+  const uploadSnapshotToDrive = useCallback(
+    async (snapshot: string, silentTokenRefresh: boolean) => {
+      const token = await getGoogleDriveAccessToken(silentTokenRefresh ? "" : "consent");
       const boundary = "zenith-canvas-boundary";
       const metadata = {
         name: `zenith-${selectedFile.id}.tldr`,
@@ -173,17 +85,33 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
           driveWebViewLink: uploaded.webViewLink,
         }),
       });
+    },
+    [selectedFile.id, tokenHeader]
+  );
 
-      setInfo("Canvas saved to Google Drive.");
+  const connectGoogleDrive = useCallback(async () => {
+    setError(null);
+    try {
+      const token = await getGoogleDriveAccessToken();
+      const res = await fetch("/api/auth/google-drive/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...tokenHeader },
+        body: JSON.stringify({ accessToken: token.accessToken, expiresIn: token.expiresIn }),
+      });
+      if (!res.ok) throw new Error("Could not connect Google Drive");
+      setDriveConnected(true);
+      setInfo("Google Drive permission granted.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save to Drive");
+      setError(err instanceof Error ? err.message : "Drive permission failed");
     }
-  }, [editor, selectedFile.id, tokenHeader]);
+  }, [tokenHeader]);
 
   useEffect(() => {
     setEditor(null);
     setError(null);
     setInfo("");
+    setDriveSyncError(null);
+    setDriveSyncStatus("idle");
   }, [selectedFile.id]);
 
   useEffect(() => {
@@ -195,23 +123,80 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
     })();
   }, [tokenHeader]);
 
+  useEffect(() => {
+    if (!editor || !driveConnected) return;
+
+    let dirty = false;
+    let syncing = false;
+
+    const unlisten = editor.store.listen(
+      () => {
+        dirty = true;
+      },
+      { source: "user", scope: "document" }
+    );
+
+    const interval = setInterval(() => {
+      if (!dirty || syncing) return;
+
+      syncing = true;
+      dirty = false;
+      setDriveSyncStatus("syncing");
+
+      const snapshot = JSON.stringify(editor.getSnapshot(), null, 2);
+      void uploadSnapshotToDrive(snapshot, true)
+        .then(() => {
+          setDriveSyncStatus("synced");
+          setDriveSyncError(null);
+        })
+        .catch((err) => {
+          setDriveSyncStatus("error");
+          setDriveSyncError(err instanceof Error ? err.message : "Drive auto-sync failed");
+        })
+        .finally(() => {
+          syncing = false;
+        });
+    }, DRIVE_SYNC_INTERVAL_MS);
+
+    return () => {
+      unlisten();
+      clearInterval(interval);
+    };
+  }, [driveConnected, editor, uploadSnapshotToDrive]);
+
   return (
-    <div style={shellStyle}>
-      <header style={canvasTopBarStyle}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={onBack} style={secondaryActionStyle}>← Back to files</button>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{selectedFile.title}</div>
-            <div style={{ fontSize: 12, color: "#8f98aa" }}>{selectedFile.workspaceName || "Workspace"}</div>
+    <div className="canvas-page">
+      <div className="canvas-atmosphere" />
+
+      <header className="canvas-header">
+        <div className="canvas-file-meta">
+          <button onClick={onBack} style={secondaryActionStyle}>← Files</button>
+          <div className="canvas-title-wrap">
+            <h1 className="canvas-title">{selectedFile.title}</h1>
+            <p className="canvas-subtitle">{selectedFile.workspaceName || "Workspace"}</p>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div className="canvas-actions">
           <span style={{ fontSize: 12, color: statusColor[saveStatus] }}>● {statusLabel[saveStatus]}</span>
-          <button onClick={() => void connectGoogleDrive()} style={driveButtonStyle(driveConnected)}>
-            {driveConnected ? "Drive connected" : "Connect Drive"}
-          </button>
-          <button onClick={() => void saveCurrentToDrive()} style={primaryActionStyle}>Save to Drive</button>
+          {!driveConnected && (
+            <>
+              <button onClick={() => void connectGoogleDrive()} style={driveButtonStyle(false)}>
+                Connect Drive
+              </button>
+            </>
+          )}
+          {driveConnected && (
+            <span className="drive-connected-chip">
+              {driveSyncStatus === "syncing"
+                ? "Drive syncing..."
+                : driveSyncStatus === "synced"
+                  ? "Drive auto-synced"
+                  : driveSyncStatus === "error"
+                    ? "Drive sync paused"
+                    : "Drive permission granted"}
+            </span>
+          )}
           <button onClick={() => void saveToFile()} style={secondaryActionStyle}>Export</button>
           <button onClick={() => void loadFromFile()} style={secondaryActionStyle}>Open file</button>
           <button onClick={onLogout} style={secondaryActionStyle}>Sign out</button>
@@ -222,11 +207,12 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
         <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
           {error && <div style={errorBannerStyle}>{error}</div>}
           {info && <div style={infoBannerStyle}>{info}</div>}
+          {driveSyncError && <div style={errorBannerStyle}>{driveSyncError}</div>}
         </div>
       )}
 
-      <div style={canvasShellStyle}>
-        <div style={canvasFrameStyle}>
+      <div className="canvas-shell">
+        <div className="canvas-frame">
           <TldrawCanvas
             key={selectedFile.id}
             documentId={selectedFile.id}
@@ -238,50 +224,6 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
     </div>
   );
 }
-
-const shellStyle: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-  padding: "18px 18px 14px",
-  background: "#171717",
-  color: "#f8fafc",
-  overflow: "hidden",
-};
-
-const canvasTopBarStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 14,
-  flexWrap: "wrap",
-  marginBottom: 16,
-};
-
-const canvasShellStyle: React.CSSProperties = {
-  height: "calc(100% - 92px)",
-  minHeight: 560,
-  display: "block",
-};
-
-const canvasFrameStyle: React.CSSProperties = {
-  position: "relative",
-  height: "100%",
-  minHeight: 0,
-  borderRadius: 16,
-  overflow: "hidden",
-  border: "1px solid #2b2b2b",
-  background: "#0f172a",
-};
-
-const primaryActionStyle: React.CSSProperties = {
-  border: "none",
-  borderRadius: 8,
-  padding: "11px 14px",
-  background: "#2563eb",
-  color: "#fff",
-  fontWeight: 600,
-  cursor: "pointer",
-};
 
 const secondaryActionStyle: React.CSSProperties = {
   border: "1px solid #313131",
