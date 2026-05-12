@@ -12,9 +12,6 @@ build/
 .env.local
 .env.*.local
 
-# Tauri
-src-tauri/target/
-
 # Database
 *.db
 *.sqlite

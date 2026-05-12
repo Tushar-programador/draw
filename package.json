@@ -2,7 +2,7 @@
   "name": "zenith-canvas",
   "version": "1.0.0",
   "private": true,
-  "description": "High-performance AI-native collaborative whiteboard for engineers",
+  "description": "High-performance AI-native collaborative whiteboard for engineers (web)",
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
