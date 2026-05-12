@@ -15,6 +15,10 @@ model User {
   email     String   @unique
   name      String
   password  String
+  emailVerified Boolean @default(false)
+  googleDriveConnected Boolean @default(false)
+  googleDriveAccessToken String?
+  googleDriveTokenExpiry DateTime?
   avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -22,6 +26,8 @@ model User {
   ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
   memberships      WorkspaceMember[]
   createdDocuments DocumentMeta[]
+  emailOtps        EmailOtp[]
+  resetOtps        PasswordResetOtp[]
 }
 
 // ─── Workspace ────────────────────────────────────────────────────────────────
@@ -58,7 +64,11 @@ model DocumentMeta {
   id          String   @id @default(cuid())
   workspaceId String
   title       String   @default("Untitled Canvas")
+  stage       DocumentStage @default(BACKLOG)
   thumbnailUrl String?
+  driveFileId String?
+  driveWebViewLink String?
+  lastSyncedAt DateTime?
   isArchived  Boolean  @default(false)
   createdBy   String
   createdAt   DateTime @default(now())
@@ -68,10 +78,43 @@ model DocumentMeta {
   creator   User      @relation(fields: [createdBy], references: [id])
 }
 
+model EmailOtp {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model PasswordResetOtp {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
 // ─── RBAC Role Enum ───────────────────────────────────────────────────────────
 enum Role {
   OWNER
   ADMIN
   EDITOR
   VIEWER
+}
+
+enum DocumentStage {
+  BACKLOG
+  IN_PROGRESS
+  REVIEW
+  DONE
 }

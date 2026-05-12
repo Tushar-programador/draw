@@ -60,6 +60,7 @@ export async function documentRoutes(app: FastifyInstance) {
         where: { id: documentId },
         data: {
           ...(body.data.title !== undefined ? { title: body.data.title } : {}),
+          ...(body.data.stage !== undefined ? { stage: body.data.stage } : {}),
           ...(body.data.isArchived !== undefined ? { isArchived: body.data.isArchived } : {}),
         },
       });

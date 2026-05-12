@@ -3,7 +3,13 @@ import { CanvasPage } from "./pages/CanvasPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { HomePage } from "./pages/HomePage.js";
 
-export type AuthState = { token: string; userId: string; name: string } | null;
+export type AuthState = {
+  token: string;
+  userId: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+} | null;
 type Page = "home" | "login" | "app";
 
 export default function App() {

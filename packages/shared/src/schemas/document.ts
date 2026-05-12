@@ -5,9 +5,13 @@ export const DocumentSchema = z.object({
   id: z.string().cuid(),
   workspaceId: z.string().cuid(),
   title: z.string().min(1).max(200).default("Untitled Canvas"),
+  stage: z.enum(["BACKLOG", "IN_PROGRESS", "REVIEW", "DONE"]).default("BACKLOG"),
   /** Serialised Yjs document snapshot stored as Base64 */
   yjsSnapshot: z.string().optional(),
   thumbnailUrl: z.string().url().nullable().default(null),
+  driveFileId: z.string().nullable().default(null),
+  driveWebViewLink: z.string().url().nullable().default(null),
+  lastSyncedAt: z.coerce.date().nullable().default(null),
   isArchived: z.boolean().default(false),
   createdBy: z.string().cuid(),
   createdAt: z.coerce.date(),
@@ -23,6 +27,7 @@ export type CreateDocument = z.infer<typeof CreateDocumentSchema>;
 
 export const UpdateDocumentSchema = DocumentSchema.pick({
   title: true,
+  stage: true,
   isArchived: true,
 }).partial();
 export type UpdateDocument = z.infer<typeof UpdateDocumentSchema>;
