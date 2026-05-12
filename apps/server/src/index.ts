@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest, type FastifyReply } from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyHelmet from "@fastify/helmet";
 import fastifyJwt from "@fastify/jwt";
@@ -14,17 +14,28 @@ import { documentRoutes } from "./routes/documents.js";
 import { aiRoutes } from "./routes/ai.js";
 import { createHocuspocusServer } from "./hocuspocus/server.js";
 
+declare module "fastify" {
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
+
 const PORT = Number(process.env["PORT"] ?? 3001);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
 
-// ─── Build App ────────────────────────────────────────────────────────────────
+// ─── Build Fastify on a plain HTTP server ────────────────────────────────────
+const httpServer = createServer();
+
 const app = Fastify({
+  serverFactory: (handler) => {
+    httpServer.on("request", handler);
+    return httpServer;
+  },
   logger: {
     level: process.env["NODE_ENV"] === "production" ? "info" : "debug",
-    transport:
-      process.env["NODE_ENV"] !== "production"
-        ? { target: "pino-pretty", options: { colorize: true } }
-        : undefined,
+    ...(process.env["NODE_ENV"] !== "production"
+      ? { transport: { target: "pino-pretty", options: { colorize: true } } }
+      : {}),
   },
 });
 
@@ -42,12 +53,11 @@ if (!jwtSecret) throw new Error("JWT_SECRET environment variable is required");
 
 await app.register(fastifyJwt, { secret: jwtSecret });
 
-// Convenience decorator used in route preHandlers
-app.decorate("authenticate", async (request: Parameters<typeof app.jwt.verify>[0], reply: Parameters<typeof app.jwt.verify>[1]) => {
+app.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
   try {
     await request.jwtVerify();
-  } catch {
-    reply.code(401).send({ error: "Unauthorized" });
+  } catch (err) {
+    reply.send(err);
   }
 });
 
@@ -62,7 +72,6 @@ await app.register(documentRoutes, { prefix: "/api/workspaces" });
 await app.register(aiRoutes, { prefix: "/api/ai" });
 
 // ─── Socket.io + Hocuspocus ───────────────────────────────────────────────────
-const httpServer = createServer(app.server);
 const io = new SocketIOServer(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
   transports: ["websocket", "polling"],

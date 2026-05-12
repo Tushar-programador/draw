@@ -1,4 +1,4 @@
-import { Server as HocuspocusServer } from "@hocuspocus/server";
+import { Hocuspocus } from "@hocuspocus/server";
 import { Database } from "@hocuspocus/extension-database";
 import type { Db } from "mongodb";
 import type { Server as SocketIOServer } from "socket.io";
@@ -11,14 +11,16 @@ import type { Server as SocketIOServer } from "socket.io";
 export function createHocuspocusServer(mongo: Db, io: SocketIOServer) {
   const collection = mongo.collection<{ name: string; data: Buffer }>("yjs_documents");
 
-  const hocuspocus = HocuspocusServer.configure({
+  const hocuspocus = new Hocuspocus();
+
+  hocuspocus.configure({
     extensions: [
       new Database({
-        fetch: async ({ documentName }) => {
+        fetch: async ({ documentName }: { documentName: string }) => {
           const doc = await collection.findOne({ name: documentName });
           return doc?.data ?? null;
         },
-        store: async ({ documentName, state }) => {
+        store: async ({ documentName, state }: { documentName: string; state: Uint8Array }) => {
           await collection.updateOne(
             { name: documentName },
             { $set: { name: documentName, data: Buffer.from(state) } },
@@ -28,14 +30,14 @@ export function createHocuspocusServer(mongo: Db, io: SocketIOServer) {
       }),
     ],
 
-    async onAuthenticate({ token }) {
+    async onAuthenticate({ token }: { token: string }) {
       // TODO: validate JWT token extracted from the WebSocket connection params
       // and return the user payload so it is available in hooks.
       if (!token) throw new Error("Authentication required");
     },
 
-    async onChange({ documentName, document }) {
-      // Optionally: update `DocumentMeta.updatedAt` in PostgreSQL here via
+    async onChange({ documentName, document }: { documentName: string; document: unknown }) {
+      // Optionally: update `DocumentMeta.updatedAt` in PostgreSQL via
       // an event emitter / queue to avoid tight coupling.
       void documentName;
       void document;
@@ -44,9 +46,9 @@ export function createHocuspocusServer(mongo: Db, io: SocketIOServer) {
 
   // Bridge Socket.io's underlying WebSocket transport into Hocuspocus
   io.of("/collab").on("connection", (socket) => {
-    const ws = (socket as unknown as { conn: { transport: { socket: WebSocket } } }).conn.transport
-      .socket;
-    hocuspocus.handleConnection(ws, socket.request);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws = (socket as any).conn.transport.socket as Parameters<typeof hocuspocus.handleConnection>[0];
+    hocuspocus.handleConnection(ws, socket.request as unknown as Request);
   });
 
   return hocuspocus;

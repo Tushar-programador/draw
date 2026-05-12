@@ -1,6 +1,12 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { CreateUserSchema, LoginSchema } from "@zenith/shared";
 import bcrypt from "bcryptjs";
+
+declare module "fastify" {
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
 
 export async function authRoutes(app: FastifyInstance) {
   // POST /api/auth/register

@@ -1,5 +1,11 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { CreateWorkspaceSchema, InviteMemberSchema } from "@zenith/shared";
+
+declare module "fastify" {
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
 import { requireRole } from "../middleware/rbac.js";
 
 export async function workspaceRoutes(app: FastifyInstance) {

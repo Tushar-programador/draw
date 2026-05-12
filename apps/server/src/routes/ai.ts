@@ -1,5 +1,11 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { AISketchRequestSchema } from "@zenith/shared";
+
+declare module "fastify" {
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function aiRoutes(app: FastifyInstance) {

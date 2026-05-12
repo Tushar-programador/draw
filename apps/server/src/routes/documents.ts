@@ -1,5 +1,11 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { CreateDocumentSchema, UpdateDocumentSchema } from "@zenith/shared";
+
+declare module "fastify" {
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
 import { requireRole } from "../middleware/rbac.js";
 
 export async function documentRoutes(app: FastifyInstance) {
@@ -52,7 +58,10 @@ export async function documentRoutes(app: FastifyInstance) {
 
       const doc = await app.prisma.documentMeta.update({
         where: { id: documentId },
-        data: body.data,
+        data: {
+          ...(body.data.title !== undefined ? { title: body.data.title } : {}),
+          ...(body.data.isArchived !== undefined ? { isArchived: body.data.isArchived } : {}),
+        },
       });
 
       return reply.send(doc);
