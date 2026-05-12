@@ -1,0 +1,31 @@
+{
+  "name": "zenith-canvas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "High-performance AI-native collaborative whiteboard for engineers",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "dev:server": "turbo run dev --filter=@zenith/server",
+    "dev:web": "turbo run dev --filter=@zenith/web",
+    "db:generate": "turbo run db:generate --filter=@zenith/server",
+    "db:migrate": "turbo run db:migrate --filter=@zenith/server",
+    "db:studio": "turbo run db:studio --filter=@zenith/server"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3",
+    "prettier": "^3.4.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

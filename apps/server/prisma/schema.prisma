@@ -1,0 +1,77 @@
+// Generator
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Data source — PostgreSQL
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
+  memberships      WorkspaceMember[]
+  createdDocuments DocumentMeta[]
+}
+
+// ─── Workspace ────────────────────────────────────────────────────────────────
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  isEncrypted Boolean  @default(false)
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner     User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members   WorkspaceMember[]
+  documents DocumentMeta[]
+}
+
+// ─── Workspace Member (RBAC) ──────────────────────────────────────────────────
+model WorkspaceMember {
+  userId      String
+  workspaceId String
+  role        Role     @default(VIEWER)
+  joinedAt    DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, workspaceId])
+}
+
+// ─── Document Metadata (PostgreSQL, lightweight) ──────────────────────────────
+// The actual Yjs document binary state lives in MongoDB via Hocuspocus.
+model DocumentMeta {
+  id          String   @id @default(cuid())
+  workspaceId String
+  title       String   @default("Untitled Canvas")
+  thumbnailUrl String?
+  isArchived  Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator   User      @relation(fields: [createdBy], references: [id])
+}
+
+// ─── RBAC Role Enum ───────────────────────────────────────────────────────────
+enum Role {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
