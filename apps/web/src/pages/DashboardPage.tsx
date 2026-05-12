@@ -21,6 +21,7 @@ type DashboardFile = {
   createdAt: string;
   updatedAt: string;
   authorName: string;
+  driveFileId?: string | null;
   driveWebViewLink?: string | null;
   lastSyncedAt?: string | null;
 };
@@ -31,6 +32,7 @@ export type DashboardOpenFile = {
   id: string;
   title: string;
   workspaceName: string;
+  driveFileId?: string | null;
 };
 
 const stageLabel: Record<DashboardFile["stage"], string> = {
@@ -86,6 +88,7 @@ function toOpenFile(file: DashboardFile): DashboardOpenFile {
     id: file.id,
     title: file.title,
     workspaceName: file.workspaceName,
+    driveFileId: file.driveFileId ?? null,
   };
 }
 

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tldraw/tldraw";
+import { jsPDF } from "jspdf";
+import { toJpeg, toPng, toSvg } from "html-to-image";
 import { TldrawCanvas } from "../components/Canvas/TldrawCanvas.js";
 import { useLocalCanvas } from "../hooks/useLocalCanvas.js";
 import type { AuthState } from "../App.js";
@@ -32,11 +34,14 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [driveConnected, setDriveConnected] = useState(Boolean(auth.googleDriveConnected));
   const [driveSyncStatus, setDriveSyncStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const [driveFileId, setDriveFileId] = useState<string | null>(selectedFile.driveFileId ?? null);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState("");
   const [driveSyncError, setDriveSyncError] = useState<string | null>(null);
+  const canvasFrameRef = useRef<HTMLDivElement | null>(null);
 
-  const { saveToFile, loadFromFile, saveStatus } = useLocalCanvas(editor, selectedFile.id);
+  const { saveToFile, saveStatus } = useLocalCanvas(editor, selectedFile.id);
 
   const tokenHeader = { Authorization: `Bearer ${auth.token}` };
 
@@ -44,38 +49,140 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
     setEditor(mountedEditor);
   }, []);
 
+  const downloadDataUrl = useCallback((dataUrl: string, fileName: string) => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = fileName;
+    a.click();
+  }, []);
+
+  const exportVisual = useCallback(
+    async (kind: "png" | "jpeg" | "svg" | "pdf") => {
+      if (!canvasFrameRef.current) {
+        setError("Canvas is not ready to export");
+        return;
+      }
+
+      setError(null);
+      setInfo("");
+
+      try {
+        const node = canvasFrameRef.current;
+        const baseName = selectedFile.title.trim().replace(/[\\/:*?"<>|]+/g, "-") || "canvas";
+
+        if (kind === "png") {
+          const dataUrl = await toPng(node, { cacheBust: true, pixelRatio: 2 });
+          downloadDataUrl(dataUrl, `${baseName}.png`);
+          setInfo("Exported PNG.");
+          return;
+        }
+
+        if (kind === "jpeg") {
+          const dataUrl = await toJpeg(node, { cacheBust: true, pixelRatio: 2, quality: 0.95 });
+          downloadDataUrl(dataUrl, `${baseName}.jpeg`);
+          setInfo("Exported JPEG.");
+          return;
+        }
+
+        if (kind === "svg") {
+          const dataUrl = await toSvg(node, { cacheBust: true, pixelRatio: 2 });
+          downloadDataUrl(dataUrl, `${baseName}.svg`);
+          setInfo("Exported SVG.");
+          return;
+        }
+
+        const pngDataUrl = await toPng(node, { cacheBust: true, pixelRatio: 2 });
+        const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: "a4" });
+        const width = pdf.internal.pageSize.getWidth();
+        const height = pdf.internal.pageSize.getHeight();
+        pdf.addImage(pngDataUrl, "PNG", 0, 0, width, height);
+        pdf.save(`${baseName}.pdf`);
+        setInfo("Exported PDF.");
+      } catch {
+        setError("Could not export this format right now");
+      }
+    },
+    [downloadDataUrl, selectedFile.title]
+  );
+
+  const shareByEmail = useCallback(() => {
+    const subject = encodeURIComponent(`Zenith Canvas: ${selectedFile.title}`);
+    const body = encodeURIComponent(
+      `Hi,%0D%0A%0D%0AI am sharing this canvas: ${selectedFile.title}%0D%0A${window.location.href}%0D%0A%0D%0ARegards`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  }, [selectedFile.title]);
+
+  const copyShareLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setInfo("Share link copied.");
+    } catch {
+      setError("Could not copy share link");
+    }
+  }, []);
+
   const uploadSnapshotToDrive = useCallback(
     async (snapshot: string, silentTokenRefresh: boolean) => {
       const token = await getGoogleDriveAccessToken(silentTokenRefresh ? "" : "consent");
-      const boundary = "zenith-canvas-boundary";
-      const metadata = {
-        name: `zenith-${selectedFile.id}.tldr`,
-        mimeType: "application/json",
+
+      const createFile = async () => {
+        const boundary = "zenith-canvas-boundary";
+        const metadata = {
+          name: `zenith-${selectedFile.id}.tldr`,
+          mimeType: "application/json",
+        };
+        const multipartBody =
+          `--${boundary}\r\n` +
+          "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+          `${JSON.stringify(metadata)}\r\n` +
+          `--${boundary}\r\n` +
+          "Content-Type: application/json\r\n\r\n" +
+          `${snapshot}\r\n` +
+          `--${boundary}--`;
+
+        const createRes = await fetch(
+          "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token.accessToken}`,
+              "Content-Type": `multipart/related; boundary=${boundary}`,
+            },
+            body: multipartBody,
+          }
+        );
+
+        if (!createRes.ok) throw new Error("Google Drive upload failed");
+        return (await createRes.json()) as { id: string; webViewLink?: string };
       };
-      const multipartBody =
-        `--${boundary}\r\n` +
-        "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
-        `${JSON.stringify(metadata)}\r\n` +
-        `--${boundary}\r\n` +
-        "Content-Type: application/json\r\n\r\n" +
-        `${snapshot}\r\n` +
-        `--${boundary}--`;
 
-      const uploadRes = await fetch(
-        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token.accessToken}`,
-            "Content-Type": `multipart/related; boundary=${boundary}`,
-          },
-          body: multipartBody,
+      let uploaded: { id: string; webViewLink?: string };
+      if (driveFileId) {
+        const updateRes = await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media&fields=id,webViewLink`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token.accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: snapshot,
+          }
+        );
+
+        if (updateRes.ok) {
+          uploaded = (await updateRes.json()) as { id: string; webViewLink?: string };
+        } else if (updateRes.status === 404) {
+          uploaded = await createFile();
+        } else {
+          throw new Error("Google Drive update failed");
         }
-      );
+      } else {
+        uploaded = await createFile();
+      }
 
-      if (!uploadRes.ok) throw new Error("Google Drive upload failed");
-
-      const uploaded = (await uploadRes.json()) as { id: string; webViewLink?: string };
+      setDriveFileId(uploaded.id);
       await fetch("/api/auth/google-drive/save-metadata", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...tokenHeader },
@@ -86,7 +193,7 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
         }),
       });
     },
-    [selectedFile.id, tokenHeader]
+    [driveFileId, selectedFile.id, tokenHeader]
   );
 
   const connectGoogleDrive = useCallback(async () => {
@@ -108,11 +215,12 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
 
   useEffect(() => {
     setEditor(null);
+    setDriveFileId(selectedFile.driveFileId ?? null);
     setError(null);
     setInfo("");
     setDriveSyncError(null);
     setDriveSyncStatus("idle");
-  }, [selectedFile.id]);
+  }, [selectedFile.driveFileId, selectedFile.id]);
 
   useEffect(() => {
     void (async () => {
@@ -186,20 +294,41 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
               </button>
             </>
           )}
-          {driveConnected && (
-            <span className="drive-connected-chip">
-              {driveSyncStatus === "syncing"
-                ? "Drive syncing..."
-                : driveSyncStatus === "synced"
-                  ? "Drive auto-synced"
-                  : driveSyncStatus === "error"
-                    ? "Drive sync paused"
-                    : "Drive permission granted"}
-            </span>
-          )}
-          <button onClick={() => void saveToFile()} style={secondaryActionStyle}>Export</button>
-          <button onClick={() => void loadFromFile()} style={secondaryActionStyle}>Open file</button>
-          <button onClick={onLogout} style={secondaryActionStyle}>Sign out</button>
+          <div style={{ position: "relative", zIndex: 9999 }}>
+            <button onClick={() => setShareMenuOpen((value) => !value)} style={secondaryActionStyle}>Share</button>
+            {shareMenuOpen && (
+              <div style={shareMenuStyle}>
+                <div style={shareMenuSectionStyle}>
+                  <div style={shareMenuSectionTitleStyle}>Share</div>
+                  <button style={shareMenuItemStyle} onClick={() => { shareByEmail(); setShareMenuOpen(false); }}>
+                    <span style={{ marginRight: 8 }}>✉️</span> Email
+                  </button>
+                  <button style={shareMenuItemStyle} onClick={() => { void copyShareLink(); setShareMenuOpen(false); }}>
+                    <span style={{ marginRight: 8 }}>🔗</span> Copy Link
+                  </button>
+                </div>
+
+                <div style={shareMenuSectionStyle}>
+                  <div style={shareMenuSectionTitleStyle}>Export</div>
+                  <button style={shareMenuItemStyle} onClick={() => { void saveToFile(); setShareMenuOpen(false); }}>
+                    <span style={{ marginRight: 8 }}>📄</span> .tldr
+                  </button>
+                  <button style={shareMenuItemStyle} onClick={() => { void exportVisual("pdf"); setShareMenuOpen(false); }}>
+                    <span style={{ marginRight: 8 }}>📕</span> PDF
+                  </button>
+                  <button style={shareMenuItemStyle} onClick={() => { void exportVisual("png"); setShareMenuOpen(false); }}>
+                    <span style={{ marginRight: 8 }}>🖼️</span> PNG
+                  </button>
+                  <button style={shareMenuItemStyle} onClick={() => { void exportVisual("jpeg"); setShareMenuOpen(false); }}>
+                    <span style={{ marginRight: 8 }}>🖼️</span> JPEG
+                  </button>
+                  <button style={shareMenuItemStyle} onClick={() => { void exportVisual("svg"); setShareMenuOpen(false); }}>
+                    <span style={{ marginRight: 8 }}>📐</span> SVG
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -212,7 +341,7 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
       )}
 
       <div className="canvas-shell">
-        <div className="canvas-frame">
+        <div className="canvas-frame" ref={canvasFrameRef}>
           <TldrawCanvas
             key={selectedFile.id}
             documentId={selectedFile.id}
@@ -258,3 +387,44 @@ const driveButtonStyle = (connected: boolean): React.CSSProperties => ({
   borderColor: connected ? "#1d6d45" : "#313131",
   color: connected ? "#d1fae5" : "#f8fafc",
 });
+
+const shareMenuStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 44,
+  right: 0,
+  width: 220,
+  borderRadius: 12,
+  border: "1px solid #334155",
+  background: "#0f172a",
+  boxShadow: "0 20px 40px rgba(2, 6, 23, 0.45)",
+  overflow: "hidden",
+  zIndex: 9999,
+};
+
+const shareMenuSectionStyle: React.CSSProperties = {
+  paddingBottom: 8,
+};
+
+const shareMenuSectionTitleStyle: React.CSSProperties = {
+  padding: "10px 12px 6px",
+  fontSize: 11,
+  fontWeight: 700,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.5px",
+};
+
+const shareMenuItemStyle: React.CSSProperties = {
+  width: "100%",
+  border: "none",
+  borderBottom: "1px solid #1e293b",
+  background: "transparent",
+  color: "#e2e8f0",
+  padding: "10px 12px",
+  textAlign: "left",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  fontSize: 13,
+  transition: "background-color 0.2s",
+};
