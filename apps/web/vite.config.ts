@@ -21,8 +21,5 @@ export default defineConfig({
     target: "esnext",
     sourcemap: true,
   },
-  optimizeDeps: {
-    // tldraw uses ES modules — exclude from pre-bundling
-    exclude: ["@tldraw/tldraw"],
-  },
+
 });
