@@ -19,7 +19,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       where: { userId },
       include: { workspace: true },
     });
-    return reply.send(memberships.map((m) => m.workspace));
+    return reply.send(memberships.map((m: (typeof memberships)[number]) => m.workspace));
   });
 
   // POST /api/workspaces

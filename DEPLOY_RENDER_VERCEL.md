@@ -36,7 +36,7 @@ You can use [render.yaml](render.yaml) for Blueprint deploy or configure manuall
 - Build command:
 
 ```bash
-corepack enable && pnpm install --frozen-lockfile && pnpm --filter @outdraw/shared build && pnpm --filter @outdraw/server build && pnpm --filter @outdraw/server db:generate
+pnpm install --frozen-lockfile && pnpm --filter @outdraw/shared build && pnpm --filter @outdraw/server build && pnpm --filter @outdraw/server db:generate
 ```
 
 - Start command:

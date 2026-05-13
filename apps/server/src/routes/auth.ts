@@ -309,7 +309,7 @@ export async function authRoutes(app: FastifyInstance) {
       where: { userId },
       select: { workspaceId: true },
     });
-    const workspaceIds = memberships.map((m) => m.workspaceId);
+    const workspaceIds = memberships.map((m: (typeof memberships)[number]) => m.workspaceId);
 
     const docs = await app.prisma.documentMeta.findMany({
       where: { workspaceId: { in: workspaceIds }, isArchived: false },
@@ -321,7 +321,7 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     return reply.send(
-      docs.map((doc) => ({
+      docs.map((doc: (typeof docs)[number]) => ({
         id: doc.id,
         title: doc.title,
         stage: doc.stage,
