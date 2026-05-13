@@ -22,6 +22,12 @@ declare module "fastify" {
 
 const PORT = Number(process.env["PORT"] ?? 3001);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
+const SELF_PING_INTERVAL_MS = Number(process.env["SELF_PING_INTERVAL_MS"] ?? 5 * 60 * 1000);
+const SELF_PING_URL =
+  process.env["SELF_PING_URL"] ??
+  (process.env["RENDER_EXTERNAL_URL"]
+    ? `${process.env["RENDER_EXTERNAL_URL"].replace(/\/+$/, "")}/health`
+    : "");
 
 // ─── Build Fastify on a plain HTTP server ────────────────────────────────────
 const httpServer = createServer();
@@ -103,11 +109,38 @@ io.on("connection", (socket) => {
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get("/health", async () => ({ status: "ok", ts: new Date().toISOString() }));
 
+function startSelfPing() {
+  if (!SELF_PING_URL) {
+    app.log.info("Self-ping disabled (set SELF_PING_URL or RENDER_EXTERNAL_URL to enable it).");
+    return;
+  }
+
+  const ping = async () => {
+    try {
+      const response = await fetch(SELF_PING_URL, { method: "GET" });
+      if (!response.ok) {
+        app.log.warn(`Self-ping returned status ${response.status} from ${SELF_PING_URL}`);
+      }
+    } catch (error) {
+      app.log.warn({ error }, `Self-ping failed for ${SELF_PING_URL}`);
+    }
+  };
+
+  void ping();
+  const timer = setInterval(() => {
+    void ping();
+  }, SELF_PING_INTERVAL_MS);
+  timer.unref();
+
+  app.log.info(`Self-ping enabled: ${SELF_PING_URL} every ${SELF_PING_INTERVAL_MS}ms`);
+}
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 try {
   await app.ready();
   httpServer.listen({ port: PORT, host: HOST }, () => {
     app.log.info(`OUTDRAW server running on http://${HOST}:${PORT}`);
+    startSelfPing();
   });
 } catch (err) {
   app.log.error(err);
