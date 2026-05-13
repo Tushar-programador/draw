@@ -13,7 +13,7 @@ export function TldrawCanvas({ style, onEditorMount }: Props) {
     <div style={{ position: "absolute", inset: 0, ...style }}>
       <Tldraw
         onMount={(editor) => {
-          (window as unknown as Record<string, unknown>)["__zenith_editor"] = editor;
+          (window as unknown as Record<string, unknown>)["__outdraw_editor"] = editor;
           onEditorMount?.(editor);
         }}
       />

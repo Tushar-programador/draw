@@ -276,7 +276,7 @@ export function LoginPage({ onLogin, onBack }: Props) {
             ← Back to home
           </button>
         )}
-        <h1 style={{ textAlign: "center", marginBottom: 8 }}>Zenith Canvas</h1>
+        <h1 style={{ textAlign: "center", marginBottom: 8 }}>OUTDRAW</h1>
 
         {mode === "register" && (
           <input

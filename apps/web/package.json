@@ -1,5 +1,5 @@
 {
-  "name": "@zenith/web",
+  "name": "@outdraw/web",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "@google/generative-ai": "^0.24.0",
     "@tldraw/tldraw": "^2.4.4",
     "@types/three": "^0.184.1",
-    "@zenith/shared": "workspace:*",
+    "@outdraw/shared": "workspace:*",
     "framer-motion": "^12.38.0",
     "gsap": "^3.15.0",
     "html-to-image": "^1.11.13",

@@ -17,14 +17,14 @@ type Page = "home" | "login" | "dashboard" | "canvas";
 
 export default function App() {
   const [auth, setAuth] = useState<AuthState>(() => {
-    const raw = localStorage.getItem("zenith_auth");
+    const raw = localStorage.getItem("outdraw_auth");
     return raw ? (JSON.parse(raw) as AuthState) : null;
   });
-  const [page, setPage] = useState<Page>(() => (localStorage.getItem("zenith_auth") ? "dashboard" : "home"));
+  const [page, setPage] = useState<Page>(() => (localStorage.getItem("outdraw_auth") ? "dashboard" : "home"));
   const [selectedFile, setSelectedFile] = useState<DashboardOpenFile | null>(null);
 
   const handleLogin = (state: NonNullable<AuthState>) => {
-    localStorage.setItem("zenith_auth", JSON.stringify(state));
+    localStorage.setItem("outdraw_auth", JSON.stringify(state));
     setAuth(state);
     setPage("dashboard");
   };
@@ -39,7 +39,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("zenith_auth");
+    localStorage.removeItem("outdraw_auth");
     setAuth(null);
     setSelectedFile(null);
     setPage("home");

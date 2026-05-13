@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { CreateDocumentSchema, UpdateDocumentSchema } from "@zenith/shared";
+import { CreateDocumentSchema, UpdateDocumentSchema } from "@outdraw/shared";
 
 declare module "fastify" {
   interface FastifyInstance {

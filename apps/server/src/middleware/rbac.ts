@@ -1,5 +1,5 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import type { Role } from "@zenith/shared";
+import type { Role } from "@outdraw/shared";
 
 /**
  * Role hierarchy: OWNER > ADMIN > EDITOR > VIEWER

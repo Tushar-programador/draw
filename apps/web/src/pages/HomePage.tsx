@@ -83,7 +83,7 @@ function CanvasMockup() {
       <rect x="0" y="25" width="760" height="13" fill="#111122" />
       <circle cx="22" cy="19" r="5.5" fill="#ff5f56" /><circle cx="39" cy="19" r="5.5" fill="#febc2e" /><circle cx="56" cy="19" r="5.5" fill="#27c93f" />
       <rect x="90" y="8" width="240" height="21" rx="10.5" fill="#0a0a14" stroke="#1e293b" />
-      <text x="180" y="23" textAnchor="middle" fill="#475569" fontSize="10" fontFamily="system-ui">app.zenithcanvas.io/canvas</text>
+      <text x="180" y="23" textAnchor="middle" fill="#475569" fontSize="10" fontFamily="system-ui">app.outdraw.io/canvas</text>
       <rect x="0" y="38" width="760" height="392" fill="url(#dotgrid)" />
       <rect x="0" y="38" width="48" height="392" fill="#0e0e1c" />
       <rect x="8" y="56" width="32" height="32" rx="8" fill="#7c3aed" />
@@ -95,7 +95,7 @@ function CanvasMockup() {
       <text x="80" y="134" fill="#713f12" fontSize="10" fontFamily="system-ui">turn them into real UI.</text>
       <path d="M 216 118 C 256 118 258 185 294 193" stroke="#7c3aed" strokeWidth="1.5" fill="none" markerEnd="url(#ah-purple)" strokeDasharray="5,3" opacity="0.7" />
       <g filter="url(#softshadow)"><rect x="294" y="155" width="186" height="90" rx="12" fill="url(#centerGrad)" stroke="#7c3aed" strokeWidth="1.5" /></g>
-      <text x="387" y="198" textAnchor="middle" fill="#c4b5fd" fontSize="16" fontWeight="800" fontFamily="system-ui">Zenith Canvas</text>
+      <text x="387" y="198" textAnchor="middle" fill="#c4b5fd" fontSize="16" fontWeight="800" fontFamily="system-ui">OUTDRAW</text>
       <text x="387" y="220" textAnchor="middle" fill="#7c6aad" fontSize="10" fontFamily="system-ui">Infinite whiteboard + AI</text>
       <rect x="289" y="150" width="9" height="9" rx="2.5" fill="#7c3aed" stroke="#c4b5fd" strokeWidth="1" />
       <rect x="476" y="150" width="9" height="9" rx="2.5" fill="#7c3aed" stroke="#c4b5fd" strokeWidth="1" />
@@ -351,7 +351,7 @@ export function HomePage({ onGetStarted, onLogin }: Props) {
         {/* NAV */}
         <motion.nav className="zc-nav" initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5, ease: [0.22,1,0.36,1] }}>
           <div className="zc-nav-inner">
-            <span className="zc-logo"><IconStar />Zenith Canvas</span>
+            <span className="zc-logo"><IconStar />OUTDRAW</span>
             <div className="zc-nav-links">
               <button className="zc-nav-link" onClick={() => scrollTo("#features")}>Features</button>
               <button className="zc-nav-link" onClick={() => scrollTo("#how")}>How it works</button>
@@ -475,7 +475,7 @@ export function HomePage({ onGetStarted, onLogin }: Props) {
               <h2 className="zc-section-title">Your canvas.<br /><span className="zc-gradient-text">Your rules.</span></h2>
               <p style={{ fontSize: 16, color: "#475569", lineHeight: 1.65, marginTop: 16 }}>
                 Most whiteboards store your designs on their servers, sell analytics, and lock you into
-                subscriptions. Zenith Canvas works the other way — drawing data lives on your device by default.
+                subscriptions. OUTDRAW works the other way — drawing data lives on your device by default.
               </p>
             </motion.div>
             <div className="zc-privacy-pills">
@@ -510,8 +510,8 @@ export function HomePage({ onGetStarted, onLogin }: Props) {
         {/* FOOTER */}
         <footer className="zc-footer">
           <div className="zc-footer-inner">
-            <span className="zc-logo" style={{ fontSize: 14 }}><IconStar />Zenith Canvas</span>
-            <span style={{ fontSize: 13, color: "#334155" }}>2026 Zenith Canvas. Your canvas, your rules.</span>
+            <span className="zc-logo" style={{ fontSize: 14 }}><IconStar />OUTDRAW</span>
+            <span style={{ fontSize: 13, color: "#334155" }}>2026 OUTDRAW. Your canvas, your rules.</span>
             <div style={{ display: "flex", gap: 20 }}>
               <button onClick={onGetStarted} style={{ fontSize: 13, color: "#334155", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Get started</button>
               <button onClick={onLogin} style={{ fontSize: 13, color: "#334155", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Log in</button>

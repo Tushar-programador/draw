@@ -1,7 +1,7 @@
-# Product Requirements Document (PRD) v2.0: Project "Zenith Canvas"
+# Product Requirements Document (PRD) v2.0: Project "OUTDRAW"
 
 ## 1. Executive Summary
-**Project Name:** Zenith Canvas  
+**Project Name:** OUTDRAW  
 **Objective:** A high-performance, AI-native collaborative whiteboard designed for engineers and production environments.  
 **Version:** 2.0 (Updated to Node.js & Advanced Sync Stack)
 
@@ -44,9 +44,9 @@ Based on the pivot to a unified JavaScript/TypeScript ecosystem for faster devel
 
 ---
 
-## 5. Comparison: Zenith Canvas vs. Competitors
+## 5. Comparison: OUTDRAW vs. Competitors
 
-| Feature | Zenith Canvas | Excalidraw Plus | Miro |
+| Feature | OUTDRAW | Excalidraw Plus | Miro |
 | :--- | :--- | :--- | :--- |
 | **Language Stack** | Node.js / TS / Tauri | JS / Web | Heavy Enterprise Web |
 | **Data Sync** | Yjs + Hocuspocus | Custom Sync | Proprietary |

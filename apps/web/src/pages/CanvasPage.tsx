@@ -106,7 +106,7 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
   );
 
   const shareByEmail = useCallback(() => {
-    const subject = encodeURIComponent(`Zenith Canvas: ${selectedFile.title}`);
+    const subject = encodeURIComponent(`OUTDRAW: ${selectedFile.title}`);
     const body = encodeURIComponent(
       `Hi,%0D%0A%0D%0AI am sharing this canvas: ${selectedFile.title}%0D%0A${window.location.href}%0D%0A%0D%0ARegards`
     );
@@ -127,9 +127,9 @@ export function CanvasPage({ auth, onLogout, onBack, selectedFile }: Props) {
       const token = await getGoogleDriveAccessToken(silentTokenRefresh ? "" : "consent");
 
       const createFile = async () => {
-        const boundary = "zenith-canvas-boundary";
+        const boundary = "outdraw-canvas-boundary";
         const metadata = {
-          name: `zenith-${selectedFile.id}.tldr`,
+          name: `outdraw-${selectedFile.id}.tldr`,
           mimeType: "application/json",
         };
         const multipartBody =

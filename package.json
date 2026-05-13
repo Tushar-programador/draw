@@ -1,5 +1,5 @@
 {
-  "name": "zenith-canvas",
+  "name": "outdraw",
   "version": "1.0.0",
   "private": true,
   "description": "High-performance AI-native collaborative whiteboard for engineers (web)",
@@ -8,11 +8,11 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "dev:server": "turbo run dev --filter=@zenith/server",
-    "dev:web": "turbo run dev --filter=@zenith/web",
-    "db:generate": "turbo run db:generate --filter=@zenith/server",
-    "db:migrate": "turbo run db:migrate --filter=@zenith/server",
-    "db:studio": "turbo run db:studio --filter=@zenith/server"
+    "dev:server": "turbo run dev --filter=@outdraw/server",
+    "dev:web": "turbo run dev --filter=@outdraw/web",
+    "db:generate": "turbo run db:generate --filter=@outdraw/server",
+    "db:migrate": "turbo run db:migrate --filter=@outdraw/server",
+    "db:studio": "turbo run db:studio --filter=@outdraw/server"
   },
   "workspaces": [
     "apps/*",

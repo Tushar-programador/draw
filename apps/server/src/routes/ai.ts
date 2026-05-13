@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { AISketchRequestSchema } from "@zenith/shared";
+import { AISketchRequestSchema } from "@outdraw/shared";
 
 declare module "fastify" {
   interface FastifyInstance {

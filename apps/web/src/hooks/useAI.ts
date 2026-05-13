@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { AISketchRequest, AIResponse } from "@zenith/shared";
+import type { AISketchRequest, AIResponse } from "@outdraw/shared";
 
 interface UseAIOptions {
   token: string;

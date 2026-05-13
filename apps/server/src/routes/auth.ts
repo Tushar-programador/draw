@@ -8,7 +8,7 @@ import {
   RequestEmailOtpSchema,
   ResetPasswordSchema,
   VerifyEmailOtpSchema,
-} from "@zenith/shared";
+} from "@outdraw/shared";
 import bcrypt from "bcryptjs";
 import { OAuth2Client } from "google-auth-library";
 import { randomBytes, randomInt } from "node:crypto";

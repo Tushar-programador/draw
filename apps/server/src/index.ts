@@ -107,7 +107,7 @@ app.get("/health", async () => ({ status: "ok", ts: new Date().toISOString() }))
 try {
   await app.ready();
   httpServer.listen({ port: PORT, host: HOST }, () => {
-    app.log.info(`Zenith Canvas server running on http://${HOST}:${PORT}`);
+    app.log.info(`OUTDRAW server running on http://${HOST}:${PORT}`);
   });
 } catch (err) {
   app.log.error(err);

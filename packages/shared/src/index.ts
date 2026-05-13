@@ -1,5 +1,5 @@
 // Central export for all shared schemas and types.
-// Both the server and the web app import from "@zenith/shared".
+// Both the server and the web app import from "@outdraw/shared".
 
 export * from "./schemas/user.js";
 export * from "./schemas/workspace.js";

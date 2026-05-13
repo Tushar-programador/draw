@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tldraw/tldraw";
 
 const AUTOSAVE_INTERVAL_MS = 5_000;
-const STORAGE_PREFIX = "zenith_canvas_";
+const STORAGE_PREFIX = "outdraw_canvas_";
 
 type SaveStatus = "saved" | "saving" | "unsaved";
 
@@ -118,7 +118,7 @@ export function useLocalCanvas(editor: Editor | null, documentId: string) {
           suggestedName: "canvas.tldr",
           types: [
             {
-              description: "Zenith Canvas file",
+              description: "OUTDRAW file",
               accept: { "application/json": [".tldr"] },
             },
           ],
@@ -161,7 +161,7 @@ export function useLocalCanvas(editor: Editor | null, documentId: string) {
         ).showOpenFilePicker({
           types: [
             {
-              description: "Zenith Canvas file",
+              description: "OUTDRAW file",
               accept: { "application/json": [".tldr"] },
             },
           ],
